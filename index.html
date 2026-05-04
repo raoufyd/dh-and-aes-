@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>TP Sécurité — DH (MODP14) + AES-CTR</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="page">
+      <header class="hero">
+        <h1>Communication sécurisée</h1>
+        <p class="lead">
+          <strong>Diffie-Hellman</strong> classique (RFC 3526 MODP14, 2048 bits,
+          g = 2) implémenté en JavaScript (<code>BigInt</code>), dérivation
+          <strong>HKDF</strong> et chiffrement
+          <strong>AES-CTR</strong> (FIPS-197 implémenté en JS, sans Web Crypto
+          pour AES). Contexte sécurisé requis (<code>localhost</code> ou HTTPS).
+        </p>
+      </header>
+
+      <section class="panel seq-panel" aria-labelledby="seqTitle">
+        <div class="seq-toolbar">
+          <h2 id="seqTitle" class="seq-title">Diagramme de séquence</h2>
+          <div class="seq-legend" role="list">
+            <span class="lgd lgd-public" role="listitem"
+              ><span class="lgd-dot" aria-hidden="true"></span> Public (transit
+              observable)</span
+            >
+            <span class="lgd lgd-secret" role="listitem"
+              ><span class="lgd-dot" aria-hidden="true"></span> Secret (ne
+              quitte pas la machine)</span
+            >
+          </div>
+          <button type="button" id="btnReplaySeq" class="btn-ghost">
+            Relancer l’animation des clés
+          </button>
+        </div>
+        <p class="seq-hover-hint">
+          Survole les pastilles et les étiquettes du schéma pour afficher le
+          contenu (clés publiques, ciphertext, textes) ou une explication pour
+          les secrets.
+        </p>
+
+        <div class="seq-stage" id="seqStage">
+          <div class="seq-fly-layer" id="seqFlyLayer" aria-hidden="true"></div>
+          <div class="seq-participant-row">
+            <div class="seq-participant seq-participant--alice">
+              <h3>Alice</h3>
+              <ul class="seq-local">
+                <li
+                  class="seq-tag seq-tag--secret"
+                  id="tagAlicePriv"
+                  hidden
+                  data-active="0"
+                  data-hover-src="secret-priv"
+                >
+                  Clé privée DH
+                </li>
+                <li
+                  class="seq-tag seq-tag--public"
+                  id="tagAlicePub"
+                  hidden
+                  data-active="0"
+                  data-hover-src="alice-pub"
+                >
+                  Clé publique DH
+                </li>
+                <li
+                  class="seq-tag seq-tag--secret"
+                  id="tagAliceAes"
+                  hidden
+                  data-active="0"
+                  data-hover-src="secret-aes"
+                >
+                  Clé AES (HKDF)
+                </li>
+                <li
+                  class="seq-tag seq-tag--secret"
+                  id="tagAlicePlain"
+                  hidden
+                  data-active="0"
+                  data-hover-src="alice-plain"
+                >
+                  Message en clair
+                </li>
+              </ul>
+            </div>
+
+            <div class="seq-participant seq-participant--channel">
+              <h3>Canal public</h3>
+              <p class="seq-channel-hint">
+                Ce qui apparaît ici est visible par tous.
+              </p>
+              <div id="channelArtifacts" class="seq-shelf"></div>
+            </div>
+
+            <div class="seq-participant seq-participant--bob">
+              <h3>Bob</h3>
+              <ul class="seq-local">
+                <li
+                  class="seq-tag seq-tag--secret"
+                  id="tagBobPriv"
+                  hidden
+                  data-active="0"
+                  data-hover-src="secret-priv"
+                >
+                  Clé privée DH
+                </li>
+                <li
+                  class="seq-tag seq-tag--public"
+                  id="tagBobPub"
+                  hidden
+                  data-active="0"
+                  data-hover-src="bob-pub"
+                >
+                  Clé publique DH
+                </li>
+                <li
+                  class="seq-tag seq-tag--secret"
+                  id="tagBobAes"
+                  hidden
+                  data-active="0"
+                  data-hover-src="secret-aes"
+                >
+                  Clé AES (HKDF)
+                </li>
+                <li
+                  class="seq-tag seq-tag--secret"
+                  id="tagBobPlain"
+                  hidden
+                  data-active="0"
+                  data-hover-src="bob-plain"
+                >
+                  Message en clair (déchiffré)
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+        <p class="seq-caption" id="seqCaption" aria-live="polite"></p>
+      </section>
+
+      <section class="panel controls">
+        <label for="aesSize">Taille clé AES (bits)</label>
+        <select id="aesSize">
+          <option value="128">128</option>
+          <option value="192">192</option>
+          <option value="256" selected>256</option>
+        </select>
+        <button type="button" id="btnSetup" class="primary">
+          1. Générer clés Alice &amp; Bob + secret partagé
+        </button>
+        <span id="setupStatus" class="status" aria-live="polite"></span>
+      </section>
+
+      <div class="grid two">
+        <section class="panel party" aria-labelledby="aliceTitle">
+          <h2 id="aliceTitle">Alice</h2>
+          <p class="hint">Clé publique (g^x mod p, base64)</p>
+          <textarea
+            id="alicePub"
+            rows="4"
+            readonly
+            placeholder="Générer les clés…"
+          ></textarea>
+          <label class="stack">Message en clair</label>
+          <textarea
+            id="plainText"
+            rows="3"
+            placeholder="Texte à envoyer à Bob…"
+          ></textarea>
+          <button type="button" id="btnEncrypt" class="primary" disabled>
+            2. Chiffrer (Alice)
+          </button>
+        </section>
+
+        <section class="panel party" aria-labelledby="bobTitle">
+          <h2 id="bobTitle">Bob</h2>
+          <p class="hint">Clé publique (g^x mod p, base64)</p>
+          <textarea
+            id="bobPub"
+            rows="4"
+            readonly
+            placeholder="Générer les clés…"
+          ></textarea>
+          <p class="hint">Message chiffré (IV 16 octets + AES-CTR), base64</p>
+          <textarea
+            id="cipherB64"
+            rows="5"
+            readonly
+            placeholder="Chiffrement apparaîtra ici…"
+          ></textarea>
+          <button type="button" id="btnDecrypt" class="primary" disabled>
+            3. Déchiffrer (Bob)
+          </button>
+          <label class="stack">Texte déchiffré</label>
+          <output id="decrypted" class="output-box" for="cipherB64"></output>
+        </section>
+      </div>
+
+      <section class="panel tech">
+        <h2>Détails</h2>
+        <ul>
+          <li>
+            <strong>DH MODP14</strong> : premier p et générateur g = 2 (RFC
+            3526) ; clé publique = g^x mod p ; secret partagé = g^(ab) mod p
+            calculé par exponentiation modulaire.
+          </li>
+          <li>
+            <strong>HKDF-SHA256</strong> : transforme le secret brut en clé AES
+            128/192/256 bits.
+          </li>
+          <li>
+            <strong>AES-CTR</strong> : AES-128/192/256 (FIPS-197) codé dans
+            <code>aes.js</code> ; mode compteur (IV 16 octets + flux xor). Pas
+            de tag d’intégrité (contrairement à GCM) — acceptable pour un TP
+            didactique.
+          </li>
+        </ul>
+        <p id="cryptoError" class="error" role="alert" hidden></p>
+      </section>
+    </div>
+    <script src="app.js" type="module"></script>
+  </body>
+</html>

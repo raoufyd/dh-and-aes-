@@ -1,0 +1,8 @@
+{
+  "name": "tp-sec-web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "npx --yes serve . -l 3333"
+  }
+}
